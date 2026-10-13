@@ -1,0 +1,5 @@
+/gallery-host
+/ps5-media-gallery.elf
+__pycache__/
+*.pyc
+/SHA256SUMS

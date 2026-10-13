@@ -1,0 +1,63 @@
+name: Build PS5 Media Gallery
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gallery-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang-18 lld-18 curl unzip make gcc python3 file
+      - name: Host tests and frontend syntax
+        run: |
+          make test
+          node --check tests/frontend.js
+      - name: Get verified SDK v0.44
+        run: |
+          curl -fL --retry 3 -o "$RUNNER_TEMP/sdk.zip" https://github.com/ps5-payload-dev/sdk/releases/download/v0.44/ps5-payload-sdk.zip
+          echo "4d06eab777bb135705b5a6816688c9132efb246093fe606ac488ab6cf65ca5b0  $RUNNER_TEMP/sdk.zip" | sha256sum -c -
+          mkdir -p "$RUNNER_TEMP/sdk"
+          unzip -q "$RUNNER_TEMP/sdk.zip" -d "$RUNNER_TEMP/sdk"
+          SDK_MAKE=$(find "$RUNNER_TEMP/sdk" -path '*/toolchain/prospero.mk' -print -quit)
+          test -n "$SDK_MAKE"
+          echo "PS5_PAYLOAD_SDK=$(dirname "$(dirname "$SDK_MAKE")")" >> "$GITHUB_ENV"
+      - name: Build ELF and checksum
+        id: package
+        run: |
+          make clean all
+          file ps5-media-gallery.elf
+          python3 tools/prepare_release.py
+          echo "version=$(cat VERSION)" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PS5-Media-Gallery-v${{ steps.package.outputs.version }}
+          path: |
+            ps5-media-gallery.elf
+            SHA256SUMS
+          if-no-files-found: error
+      - name: Publish versioned release
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.package.outputs.version }}
+        run: |
+          if gh release view "v$VERSION" >/dev/null 2>&1; then
+            echo "Release already exists; bump VERSION for a new release."
+          else
+            gh release create "v$VERSION" ps5-media-gallery.elf SHA256SUMS --target "$GITHUB_SHA" --title "PS5 Media Gallery v$VERSION" --notes-file RELEASE_NOTES.md
+          fi
