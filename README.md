@@ -1,4 +1,7 @@
 # PS5 Media Gallery Payload
+<p align="center">
+  <img src="screenshots/screenshot.png">
+</p>
 
 [![Build](https://github.com/Yahballon/PS5-Media-Gallery-Payload/actions/workflows/build.yml/badge.svg)](https://github.com/Yahballon/PS5-Media-Gallery-Payload/actions/workflows/build.yml)
 
